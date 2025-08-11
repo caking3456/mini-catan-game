@@ -1,0 +1,155 @@
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini-Catan</title>
+  <style>
+    body { font-family: Arial; background: #eef2f3; margin: 0; padding: 0; }
+    #players { display: flex; justify-content: space-around; padding: 10px; background: #333; color: white; font-weight: bold; }
+    #board { display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
+    .hex-row { display: flex; }
+    .hex {
+      width: 100px; height: 86px; background: gray; position: relative; margin: 5px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: white; font-weight: bold; text-shadow: 1px 1px 2px black;
+      clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+    }
+    .hex-row.offset { margin-left: 55px; } /* stagger */
+    #sidebar { position: fixed; right: 0; top: 0; width: 220px; background: #fff; padding: 10px; height: 100%; box-shadow: -2px 0 5px rgba(0,0,0,0.2); }
+    button { margin: 5px; padding: 8px; font-weight: bold; cursor: pointer; }
+    #resources { margin-bottom: 10px; }
+    .dice { font-size: 30px; margin: 10px; }
+    .player-turn { border-bottom: 3px solid yellow; }
+  </style>
+</head>
+<body>
+<div id="players"></div>
+<div id="board"></div>
+<div id="sidebar">
+  <h3 id="turn-label"></h3>
+  <h3>Your Resources</h3>
+  <div id="resources"></div>
+  <h3>Build</h3>
+  <button onclick="build('road')">Road</button>
+  <button onclick="build('settlement')">Settlement</button>
+  <button onclick="build('city')">City</button>
+  <h3>Actions</h3>
+  <button onclick="rollDice()">🎲 Roll</button>
+  <div class="dice" id="dice-result"></div>
+</div>
+<script>
+const resourceColors = {
+  wood: "#4caf50",
+  brick: "#d84315",
+  wheat: "#ffeb3b",
+  sheep: "#8bc34a",
+  ore: "#9e9e9e"
+};
+const resourceIcons = {
+  wood: "🌲",
+  brick: "🧱",
+  wheat: "🌾",
+  sheep: "🐑",
+  ore: "⛏️"
+};
+const players = [
+  {name:"P1", vp:0, color:"#f44336", res:{wood:0,brick:0,wheat:0,sheep:0,ore:0}},
+  {name:"P2", vp:0, color:"#2196f3", res:{wood:0,brick:0,wheat:0,sheep:0,ore:0}},
+  {name:"P3", vp:0, color:"#ff9800", res:{wood:0,brick:0,wheat:0,sheep:0,ore:0}},
+  {name:"P4", vp:0, color:"#9c27b0", res:{wood:0,brick:0,wheat:0,sheep:0,ore:0}}
+];
+// Staggered 7-tile mini-board
+const tiles = [
+  {res:"wood", num:5}, {res:"brick", num:6},
+  {res:"wheat", num:8}, {res:"sheep", num:9}, {res:"ore", num:4},
+  {res:"wood", num:10}, {res:"brick", num:11}
+];
+let currentPlayer = 0;
+
+function updateUI(){
+  document.getElementById("players").innerHTML =
+    players.map((p,i)=>`<div style="color:${p.color}" class="${i===currentPlayer?'player-turn':''}">${p.name} (${p.vp} VP)</div>`).join("");
+  document.getElementById("turn-label").textContent = `Turn: ${players[currentPlayer].name}`;
+  document.getElementById("resources").innerHTML =
+    Object.entries(players[currentPlayer].res)
+    .map(([r,c])=>`${resourceIcons[r]} ${r}: ${c}`).join("<br>");
+
+  // Build staggered hex layout
+  document.getElementById("board").innerHTML = `
+    <div class="hex-row offset">
+      ${makeHex(tiles[0])}
+      ${makeHex(tiles[1])}
+    </div>
+    <div class="hex-row">
+      ${makeHex(tiles[2])}
+      ${makeHex(tiles[3])}
+      ${makeHex(tiles[4])}
+    </div>
+    <div class="hex-row offset">
+      ${makeHex(tiles[5])}
+      ${makeHex(tiles[6])}
+    </div>
+  `;
+}
+function makeHex(tile){
+  return `<div class='hex' style="background:${resourceColors[tile.res]}">
+    ${resourceIcons[tile.res]}<br>${tile.num}
+  </div>`;
+}
+function rollDice(){
+  let die1 = Math.floor(Math.random()*6+1);
+  let die2 = Math.floor(Math.random()*6+1);
+  let roll = die1 + die2;
+  document.getElementById("dice-result").textContent = `🎲 ${die1} + ${die2} = ${roll}`;
+  tiles.forEach(tile=>{
+    if(tile.num===roll){
+      players.forEach(p=>{ p.res[tile.res]++; });
+    }
+  });
+  updateUI();
+  currentPlayer = (currentPlayer+1)%4;
+}
+function build(type){
+  let p = players[currentPlayer];
+  if(type==="road" && p.res.wood>=1 && p.res.brick>=1){
+    p.res.wood--; p.res.brick--;
+  }
+  if(type==="settlement" && p.res.wood>=1 && p.res.brick>=1 && p.res.wheat>=1 && p.res.sheep>=1){
+    p.res.wood--; p.res.brick--; p.res.wheat--; p.res.sheep--;
+    p.vp++;
+  }
+  if(type==="city" && p.res.wheat>=2 && p.res.ore>=3){
+    p.res.wheat-=2; p.res.ore-=3; p.vp++;
+  }
+  updateUI();
+}
+updateUI();
+</script>
+</body>
+</html>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Catan Game Dev</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f3e7; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 40px auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); padding: 32px; }
+    h1 { color: #2f6f3f; }
+    ul { margin-top: 18px; }
+    a { color: #2196f3; text-decoration: none; font-weight: bold; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Simple Catan Game Dev</h1>
+    <p>This is the development version of the Simple Catan Game. Use the link below to open the game dev environment.</p>
+    <ul>
+      <li><a href="simple-game-dev.html">Open Game Dev Page</a></li>
+    </ul>
+    <p>See the README for more information about this version.</p>
+  </div>
+</body>
+</html>
