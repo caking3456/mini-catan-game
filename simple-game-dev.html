@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mini Catan — Trades & Robber</title>
+<style>
+:root{
+  --bg:#f5f3e7; --panel:#fff; --accent:#2f6f3f; --muted:#666;
+}
+html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial;}
+body{background:var(--bg);display:flex;flex-direction:column}
+header{background:var(--accent);color:#fff;padding:10px 12px;display:flex;justify-content:space-between;align-items:center}
+header .title{font-weight:800}
+#boardWrap{padding:10px;display:flex;justify-content:center}
+#board{max-width:720px;width:100%;display:flex;flex-direction:column;align-items:center}
+.hex-row{display:flex}
+.hex-row.offset{margin-left:calc(48px + 2vw)}
+.hex{
+  width:88px;height:96px;margin:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  color:#111;font-weight:700;text-align:center;font-size:14px;
+  clip-path:polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);
+  border-radius:6px;box-shadow:0 3px 10px rgba(0,0,0,0.12);position:relative;touch-action:manipulation;
+}
+.tile-num{background:#ffffffcc;padding:2px 6px;border-radius:8px;font-weight:700;margin-top:6px;font-size:12px}
+.owner{position:absolute;right:6px;bottom:6px;padding:4px 6px;border-radius:8px;color:white;font-size:12px}
+.robber-mark{position:absolute;left:6px;top:6px;background:#000;color:#fff;padding:3px 6px;border-radius:8px;font-size:12px}
+.hex.highlight{outline:4px solid rgba(255,255,0,0.8);outline-offset:4px}
+.r-wood{background:#4caf50}
+.r-brick{background:#d84315}
+.r-wheat{background:#ffeb3b;color:#000}
+.r-sheep{background:#8bc34a}
+.r-ore{background:#9e9e9e}
+.r-desert{background:#c2b59b;color:#111}
+
+#controls{position:fixed;left:8px;right:8px;bottom:8px;background:var(--panel);border-radius:12px;padding:10px;box-shadow:0 8px 28px rgba(0,0,0,0.12);display:flex;flex-direction:column;gap:8px;z-index:40}
+.row{display:flex;gap:8px;align-items:center}
+.btn{flex:1;background:var(--accent);color:white;border:none;border-radius:10px;padding:10px;font-weight:800;font-size:16px}
+.btn.secondary{background:#efefef;color:#111;border:1px solid #ddd}
+.small{padding:8px;font-size:14px}
+.playersRow{display:flex;gap:8px;overflow:auto;padding-bottom:4px}
+.playerCard{min-width:86px;background:#fff;border-radius:8px;padding:6px;text-align:center;border:1px solid #eee}
+.playerCard.active{box-shadow:0 3px 12px rgba(0,0,0,0.12);border-color:rgba(0,0,0,0.08)}
+.resources{display:flex;gap:6px;flex-wrap:wrap}
+.res{background:white;padding:6px 8px;border-radius:8px;border:1px solid #eee;font-weight:700;display:flex;flex-direction:column;align-items:center;min-width:64px}
+.res .count{font-size:18px;margin-top:4px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);top:10%;background:#111;color:#fff;padding:8px 12px;border-radius:8px;opacity:0.95;z-index:60}
+.modal-back{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:80}
+.modal{width:92%;max-width:420px;background:#fff;border-radius:12px;padding:12px;box-shadow:0 10px 40px rgba(0,0,0,0.2)}
+select,input[type=number]{width:100%;padding:8px;margin-top:6px;border-radius:8px;border:1px solid #ddd}
+.offer-row{display:flex;gap:8px}
+.offer-col{flex:1}
+.accept-btn{background:#2b8aeb;color:#fff;border:none;padding:8px;border-radius:8px;margin-right:8px}
+.reject-btn{background:#eee;border:none;padding:8px;border-radius:8px}
+.smalltxt{font-size:12px;color:var(--muted)}
+@media(min-width:740px){
+  .hex{width:110px;height:120px}
+  .tile-num{font-size:13px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">Mini Catan — Trades & Robber</div>
+  <div id="turnInfo">Turn: Player 1</div>
+</header>
+
+<div id="boardWrap">
+  <div id="board" role="application" aria-label="Game board"></div>
+</div>
+
+<div id="controls" role="region" aria-label="Game controls">
+  <div class="playersRow" id="playersRow"></div>
+
+  <div class="row">
+    <button id="rollBtn" class="btn">🎲 Roll Dice</button>
+    <button id="endBtn" class="btn secondary small">End Turn</button>
+  </div>
+
+  <div class="row">
+    <button id="tradeBtn" class="btn secondary small">Trade</button>
+    <button id="moveRobberBtn" class="btn secondary small">Move Robber (7)</button>
+    <button id="bankTradeBtn" class="btn secondary small">4:1 Bank</button>
+  </div>
+
+  <div class="row">
+    <button id="buildSettlementBtn" class="btn secondary small">Build Settlement<br> (W+B+Wh+S)</button>
+    <button id="buildCityBtn" class="btn secondary small">Build City<br> (2Wh+3O)</button>
+    <button id="buildRoadBtn" class="btn secondary small">Build Road<br> (W+B)</button>
+  </div>
+
+  <div class="row resources" id="resourcePanel"></div>
+</div>
+
+<div id="toast" class="toast" style="display:none"></div>
+
+<!-- Modals -->
+<div id="tradeModal" style="display:none"></div>
+<div id="offerModal" style="display:none"></div>
+<div id="discardModal" style="display:none"></div>
+<div id="robberModal" style="display:none"></div>
+
+<script>
+/* ---------- Game state ---------- */
+const WIN_VP = 7;
+const players = [
+  {name:"Player 1", color:"#f44336", res:{wood:0,brick:0,wheat:0,sheep:0,ore:0}, vp:0, roads:0, _roadBonus:false},
+  {name:"Player 2", color:"#2196f3", res:{wood:0,brick:0,wheat:0,sheep:0,ore:0}, vp:0, roads:0, _roadBonus:false},
+  {name:"Player 3", color:"#ff9800", res:{wood:0,brick:0,wheat:0,sheep:0,ore:0}, vp:0, roads:0, _roadBonus:false},
+  {name:"Player 4", color:"#9c27b0", res:{wood:0,brick:0,wheat:0,sheep:0,ore:0}, vp:0, roads:0, _roadBonus:false}
+];
+// 8 tiles + 1 desert for robber to make robber useful
+let tiles = [
+  {res:"wood", num:5, owner:null, isCity:false, robber:false},
+  {res:"brick", num:6, owner:null, isCity:false, robber:false},
+  {res:"wheat", num:8, owner:null, isCity:false, robber:false},
+  {res:"sheep", num:9, owner:null, isCity:false, robber:false},
+  {res:"ore", num:4, owner:null, isCity:false, robber:false},
+  {res:"wood", num:10, owner:null, isCity:false, robber:false},
+  {res:"brick", num:11, owner:null, isCity:false, robber:false},
+  {res:"desert", num:null, owner:null, isCity:false, robber:true} // robber starts on desert
+];
+
+let currentPlayer = 0;
+let setupPhase = true;
+let placedCount = 0;
+let buildMode = null; // 'settlement' | 'city' | 'road' | null
+let lastRoll = null;
+let pendingOffer = null; // {from, to, offer:{res:qty}, request:{res:qty}}
+
+/* ---------- Helpers & UI ---------- */
+const resEmoji = {wood:"🌲", brick:"🧱", wheat:"🌾", sheep:"🐑", ore:"⛏️"};
+const resKeys = ["wood","brick","wheat","sheep","ore"];
+const tileClass = {wood:'r-wood', brick:'r-brick', wheat:'r-wheat', sheep:'r-sheep', ore:'r-ore', desert:'r-desert'};
+const toastEl = document.getElementById('toast');
+
+function toast(msg, t=1400){
+  toastEl.textContent = msg; toastEl.style.display = 'block';
+  setTimeout(()=>toastEl.style.display='none', t);
+}
+function updateHeader(){ document.getElementById('turnInfo').textContent = `Turn: ${players[currentPlayer].name}`; }
+function checkWin(pi){ if(players[pi].vp >= WIN_VP){ setTimeout(()=>alert(`${players[pi].name} wins with ${players[pi].vp} VP!`),120); return true; } return false; }
+
+/* ---------- Render board & panels ---------- */
+function renderBoard(){
+  const board = document.getElementById('board');
+  board.innerHTML = `
+    <div class="hex-row offset">${makeTile(0)}${makeTile(1)}</div>
+    <div class="hex-row">${makeTile(2)}${makeTile(3)}${makeTile(4)}</div>
+    <div class="hex-row offset">${makeTile(5)}${makeTile(6)}${makeTile(7)}</div>
+  `;
+  tiles.forEach((t, idx)=>{
+    const el = document.getElementById('tile-'+idx);
+    if(!el) return;
+    el.onclick = ()=>onTileClick(idx);
+    const ownerBox = el.querySelector('.owner');
+    const robberBox = el.querySelector('.robber-mark');
+    if(t.owner !== null){
+      ownerBox.style.display='block';
+      ownerBox.textContent = players[t.owner].name + (t.isCity ? ' 🏙' : ' ⛺');
+      ownerBox.style.background = players[t.owner].color;
+    } else {
+      ownerBox.style.display='none';
+    }
+    robberBox.style.display = t.robber ? 'block' : 'none';
+  });
+  highlightValidTiles();
+  renderPlayers();
+  renderResourcePanel();
+}
+
+function makeTile(i){
+  const t = tiles[i];
+  const cls = tileClass[t.res] || '';
+  return `<div id="tile-${i}" class="hex ${cls}" role="button" aria-label="Tile ${i}">
+    <div style="font-size:22px">${t.res==='desert' ? '🏜' : resEmoji[t.res]}</div>
+    <div class="tile-num">${t.num===null ? '' : t.num}</div>
+    <div class="owner" style="display:none"></div>
+    <div class="robber-mark" style="display:${t.robber ? 'block':'none'}">🛑</div>
+  </div>`;
+}
+
+function renderPlayers(){
+  const pr = document.getElementById('playersRow');
+  pr.innerHTML = players.map((p,i)=>`
+    <div class="playerCard ${i===currentPlayer?'active':''}" style="border-left:6px solid ${p.color}">
+      <div style="font-weight:800">${p.name}</div>
+      <div class="smalltxt">${p.vp} VP • ${p.roads} Rd</div>
+    </div>
+  `).join('');
+}
+
+function renderResourcePanel(){
+  const rp = document.getElementById('resourcePanel');
+  const p = players[currentPlayer];
+  rp.innerHTML = resKeys.map(k=>
+    `<div class="res"><div style="font-size:18px">${resEmoji[k]}</div><div class="count">${p.res[k]}</div><div class="smalltxt">${k}</div></div>`
+  ).join('');
+}
+
+/* ---------- Tile click: placement, builds, robber, info ---------- */
+function onTileClick(idx){
+  const tile = tiles[idx];
+  if(setupPhase){
+    if(tile.owner !== null){ toast('Tile already has a settlement'); return; }
+    tiles[idx].owner = currentPlayer;
+    players[currentPlayer].vp += 1;
+    placedCount++;
+    toast(`${players[currentPlayer].name} placed a starting settlement`);
+    renderBoard();
+    currentPlayer = (currentPlayer+1)%players.length;
+    if(placedCount >= players.length){ setupPhase=false; toast('Setup complete — game begins!'); }
+    updateHeader();
+    checkWin((currentPlayer+players.length-1)%players.length);
+    return;
+  }
+
+  // Build modes
+  if(buildMode === 'settlement'){
+    if(tile.owner !== null){ toast('Tile already has a settlement'); return; }
+    const p = players[currentPlayer];
+    if(hasResources(p, {wood:1, brick:1, wheat:1, sheep:1})){
+      useResources(p, {wood:1, brick:1, wheat:1, sheep:1});
+      tiles[idx].owner = currentPlayer;
+      p.vp += 1;
+      toast('Settlement built');
+      buildMode = null; renderBoard(); renderResourcePanel(); if(checkWin(currentPlayer)) return;
+    } else toast('Not enough resources');
+    return;
+  }
+  if(buildMode === 'city'){
+    if(tile.owner !== currentPlayer){ toast('You can only upgrade your own settlement'); return; }
+    if(tile.isCity){ toast('Already a city'); return; }
+    const p = players[currentPlayer];
+    if(hasResources(p, {wheat:2, ore:3})){
+      useResources(p, {wheat:2, ore:3});
+      tile.isCity = true;
+      p.vp += 1; // cities are +1 VP
+      toast('Upgraded to city');
+      buildMode = null; renderBoard(); renderResourcePanel(); if(checkWin(currentPlayer)) return;
+    } else toast('Not enough resources');
+    return;
+  }
+  if(buildMode === 'road'){
+    const p = players[currentPlayer];
+    if(hasResources(p, {wood:1, brick:1})){
+      useResources(p, {wood:1, brick:1});
+      p.roads++;
+      toast('Built a road (abstract)');
+      buildMode = null; renderResourcePanel(); renderPlayers();
+      if(p.roads >= 3 && !p._roadBonus){ p.vp += 1; p._roadBonus=true; toast('Road bonus +1 VP'); renderPlayers(); if(checkWin(currentPlayer)) return; }
+    } else toast('Not enough resources');
+    return;
+  }
+
+  // If moving robber is active? We'll use robber modal triggered by Move Robber button or roll=7
+  // Info tap
+  if(tile.owner === null) toast(`${tile.res==='desert' ? 'Desert' : resEmoji[tile.res]} Tile ${tile.num || ''} — empty`);
+  else toast(`${resEmoji[tile.res]} Tile ${tile.num || ''} — ${players[tile.owner].name}${tile.isCity?' (city)':''}`);
+}
+
+/* ---------- Resource helpers ---------- */
+function hasResources(player, needed){
+  return Object.entries(needed).every(([k,v]) => (player.res[k]||0) >= v);
+}
+function useResources(player, needed){
+  Object.entries(needed).forEach(([k,v]) => player.res[k] = Math.max((player.res[k]||0) - v, 0));
+}
+
+/* ---------- Dice & production ---------- */
+function rollDice(){
+  if(setupPhase){ toast('Finish setup first'); return; }
+  if(lastRoll !== null){ toast('You already rolled'); return; }
+  const d1 = Math.floor(Math.random()*6) + 1;
+  const d2 = Math.floor(Math.random()*6) + 1;
+  const roll = d1 + d2;
+  lastRoll = roll;
+  toast(`${players[currentPlayer].name} rolled ${d1}+${d2} = ${roll}`, 1400);
+
+  if(roll === 7){
+    // discard phase for all players with >7 cards
+    handleSevenRoll();
+    return;
+  }
+
+  // give resources to owners of matching tiles unless robber is on tile
+  tiles.forEach(t => {
+    if(t.num === roll && t.owner !== null && !t.robber){
+      const amount = t.isCity ? 2 : 1;
+      players[t.owner].res[t.res] = (players[t.owner].res[t.res] || 0) + amount;
+    }
+  });
+
+  setTimeout(()=>{ renderResourcePanel(); renderPlayers(); }, 400);
+}
+
+/* ---------- Roll 7: discard half of >7 cards, then active player moves robber ---------- */
+function handleSevenRoll(){
+  // compute who must discard — >7 cards (sum of resources)
+  const mustDiscard = [];
+  players.forEach((p, idx) => {
+    const total = resKeys.reduce((s,k)=>s + (p.res[k]||0), 0);
+    if(total > 7) mustDiscard.push({idx, total});
+  });
+
+  if(mustDiscard.length === 0){
+    toast('No one needs to discard. Move the robber.');
+    // allow active player to move robber
+    setTimeout(()=>openRobberModal(), 900);
+    return;
+  }
+
+  // open discard modal for each affected player in sequence (pass-and-play)
+  openDiscardModal(mustDiscard, 0);
+}
+
+function openDiscardModal(list, pos){
+  if(pos >= list.length){
+    // all done → open robber
+    toast('All discards done. Move the robber.');
+    setTimeout(()=>openRobberModal(), 700);
+    return;
+  }
+  const {idx, total} = list[pos];
+  const player = players[idx];
+  const must = Math.floor(total / 2);
+  // create modal asking player to pick must cards to discard
+  const modal = document.createElement('div');
+  modal.className = 'modal-back';
+  modal.innerHTML = `
+    <div class="modal">
+      <div style="font-weight:800">Discard ${must} cards — ${player.name}</div>
+      <div class="smalltxt">Tap counts to reduce</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        ${resKeys.map(k=>`<div style="flex:1;text-align:center">
+          <div style="font-size:20px">${resEmoji[k]}</div>
+          <div style="font-weight:800" id="d-${idx}-${k}">${player.res[k]}</div>
+          <div class="smalltxt">${k}</div>
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button id="d-done" class="accept-btn">Done</button>
+        <button id="d-cancel" class="reject-btn">Cancel</button>
+      </div>
+      <div class="smalltxt" style="margin-top:8px">Select the cards you will discard (total ${must}).</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // attach tap handlers to counts (decrease)
+  resKeys.forEach(k => {
+    const elId = `d-${idx}-${k}`;
+    modal.querySelector(`#${elId}`).onclick = ()=>{
+      const current = parseInt(modal.querySelector(`#${elId}`).textContent, 10);
+      if(current > 0){
+        modal.querySelector(`#${elId}`).textContent = current - 1;
+      }
+    };
+  });
+
+  modal.querySelector('#d-done').onclick = ()=>{
+    // compute discarded total from original counts
+    const newCounts = {};
+    let discarded = 0;
+    resKeys.forEach(k=>{
+      const remain = parseInt(modal.querySelector(`#d-${idx}-${k}`).textContent, 10);
+      const orig = player.res[k] || 0;
+      const disc = orig - remain;
+      discarded += disc;
+      newCounts[k] = remain;
+    });
+    if(discarded !== Math.floor(total/2)){
+      alert(`You must discard exactly ${Math.floor(total/2)} cards. You selected ${discarded}.`);
+      return;
+    }
+    // commit
+    resKeys.forEach(k => player.res[k] = newCounts[k]);
+    document.body.removeChild(modal);
+    renderResourcePanel();
+    renderPlayers();
+    openDiscardModal(list, pos+1);
+  };
+  modal.querySelector('#d-cancel').onclick = ()=>{
+    // revert: just close and force them to redo (can't cancel discard)
+    document.body.removeChild(modal);
+    openDiscardModal(list, pos);
+  };
+}
+
+/* ---------- Robber: place & steal ---------- */
+function openRobberModal(){
+  // inform the active player to pick a tile to move robber to
+  const modal = document.createElement('div');
+  modal.className = 'modal-back';
+  modal.innerHTML = `
+    <div class="modal">
+      <div style="font-weight:800">Move the robber — ${players[currentPlayer].name}</div>
+      <div class="smalltxt">Tap a tile to place the robber and optionally steal a random card from a player with a settlement there.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button id="cancelRob" class="reject-btn">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  // temporarily set board tiles clickable for robber placement
+  tiles.forEach((t, idx)=>{
+    const el = document.getElementById('tile-'+idx);
+    const old = el.onclick;
+    el.onclick = ()=>{
+      // remove robber from others
+      tiles.forEach(tt=>tt.robber=false);
+      tiles[idx].robber = true;
+      // if tile has settlement(s) from other players, steal from one random such player
+      if(t.owner !== null && t.owner !== currentPlayer){
+        const victimIdx = t.owner;
+        const victim = players[victimIdx];
+        // pick a random resource with count>0
+        const available = resKeys.filter(k=>victim.res[k] > 0);
+        if(available.length > 0){
+          const pick = available[Math.floor(Math.random()*available.length)];
+          // transfer one card
+          victim.res[pick]--;
+          players[currentPlayer].res[pick] = (players[currentPlayer].res[pick]||0) + 1;
+          toast(`Stole ${resEmoji[pick]} from ${victim.name}`);
+        } else {
+          toast(`${victim.name} had no cards to steal`);
+        }
+      } else {
+        // if the robber is placed on a tile without other players, simply place it
+        toast('Robber moved');
+      }
+      document.body.removeChild(modal);
+      // restore tile onclicks to normal behavior
+      renderBoard();
+    };
+  });
+
+  modal.querySelector('#cancelRob').onclick = ()=>{
+    document.body.removeChild(modal);
+    renderBoard();
+  };
+}
+
+/* ---------- Build buttons ---------- */
+document.getElementById('buildSettlementBtn').onclick = ()=>{
+  if(setupPhase){ toast('Tap an empty tile to place your starting settlement during setup.'); return; }
+  buildMode = 'settlement'; toast('Tap an empty tile to build a settlement.');
+  highlightValidTiles();
+};
+document.getElementById('buildCityBtn').onclick = ()=>{ buildMode = 'city'; toast('Tap your settlement to upgrade to a city.'); highlightValidTiles(); };
+document.getElementById('buildRoadBtn').onclick = ()=>{ buildMode = 'road'; toast('Tap any tile to pay for a road (abstract).'); highlightValidTiles(); };
+
+/* ---------- Bank trade 4:1 ---------- */
+document.getElementById('bankTradeBtn').onclick = ()=>{
+  const modal = document.createElement('div');
+  modal.className = 'modal-back';
+  modal.innerHTML = `
+    <div class="modal">
+      <div style="font-weight:800">Bank Trade 4:1 — ${players[currentPlayer].name}</div>
+      <div class="smalltxt">Give 4 of one resource and receive 1 of any other.</div>
+      <div style="margin-top:8px">
+        <label>Give (resource)</label>
+        <select id="giveRes">${resKeys.map(k=>`<option value="${k}">${k}</option>`).join('')}</select>
+        <label style="margin-top:8px">Receive (resource)</label>
+        <select id="getRes">${resKeys.map(k=>`<option value="${k}">${k}</option>`).join('')}</select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="bankDo" class="accept-btn">Trade</button>
+        <button id="bankCancel" class="reject-btn">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.querySelector('#bankDo').onclick = ()=>{
+    const give = modal.querySelector('#giveRes').value;
+    const get = modal.querySelector('#getRes').value;
+    if(give === get){ alert('Choose different resources'); return; }
+    const p = players[currentPlayer];
+    if(p.res[give] >= 4){
+      p.res[give] -= 4; p.res[get] = (p.res[get] || 0) + 1;
+      toast('Bank trade completed');
+      document.body.removeChild(modal); renderResourcePanel();
+    } else alert('Not enough of that resource to trade');
+  };
+  modal.querySelector('#bankCancel').onclick = ()=>document.body.removeChild(modal);
+};
+
+/* ---------- Player-to-player trade UI ---------- */
+document.getElementById('tradeBtn').onclick = ()=>openTradeModal();
+
+function openTradeModal(){
+  // only active player can initiate
+  const modal = document.createElement('div');
+  modal.className = 'modal-back';
+  modal.innerHTML = `
+    <div class="modal">
+      <div style="font-weight:800">Create Trade Offer — ${players[currentPlayer].name}</div>
+      <div class="smalltxt">Offer some of your resources for resources from another player</div>
+      <div style="margin-top:8px">
+        <label>To player</label>
+        <select id="toPlayer">${players.map((p,i)=>`<option value="${i}">${p.name}</option>`).join('')}</select>
+        <label style="margin-top:8px">Offer resource</label>
+        <select id="offerRes">${resKeys.map(k=>`<option value="${k}">${k}</option>`).join('')}</select>
+        <input id="offerQty" type="number" min="1" value="1"/>
+        <label style="margin-top:8px">Request resource</label>
+        <select id="reqRes">${resKeys.map(k=>`<option value="${k}">${k}</option>`).join('')}</select>
+        <input id="reqQty" type="number" min="1" value="1"/>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="sendOffer" class="accept-btn">Send Offer</button>
+        <button id="closeOffer" class="reject-btn">Cancel</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelector('#sendOffer').onclick = ()=>{
+    const to = parseInt(modal.querySelector('#toPlayer').value, 10);
+    if(to === currentPlayer){ alert('Choose a different player'); return; }
+    const offerRes = modal.querySelector('#offerRes').value;
+    const offerQty = parseInt(modal.querySelector('#offerQty').value, 10) || 0;
+    const reqRes = modal.querySelector('#reqRes').value;
+    const reqQty = parseInt(modal.querySelector('#reqQty').value, 10) || 0;
+    const p = players[currentPlayer];
+    if(offerQty < 1 || reqQty < 1){ alert('Quantities must be > 0'); return; }
+    if(p.res[offerRes] < offerQty){ alert('You do not have enough to offer'); return; }
+
+    // create pendingOffer and show to target
+    pendingOffer = {from: currentPlayer, to, offer:{[offerRes]:offerQty}, request:{[reqRes]:reqQty}};
+    document.body.removeChild(modal);
+    showOfferToRecipient();
+  };
+  modal.querySelector('#closeOffer').onclick = ()=>document.body.removeChild(modal);
+}
+
+function showOfferToRecipient(){
+  if(!pendingOffer) return;
+  const target = pendingOffer.to;
+  const modal = document.createElement('div');
+  modal.className = 'modal-back';
+  const fromName = players[pendingOffer.from].name;
+  const toName = players[target].name;
+  modal.innerHTML = `
+    <div class="modal">
+      <div style="font-weight:800">${toName} — Trade Offer from ${fromName}</div>
+      <div style="margin-top:8px">
+        <div><strong>Offer:</strong> ${formatResList(pendingOffer.offer)}</div>
+        <div style="margin-top:6px"><strong>Request:</strong> ${formatResList(pendingOffer.request)}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="acceptOffer" class="accept-btn">Accept</button>
+        <button id="rejectOffer" class="reject-btn">Reject</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  modal.querySelector('#acceptOffer').onclick = ()=>{
+    // verify recipient has requested resources
+    const recipient = players[target];
+    const reqRes = Object.entries(pendingOffer.request)[0];
+    const [reqKey, reqQty] = reqRes;
+    if(recipient.res[reqKey] < reqQty){ alert(`${toName} doesn't have enough to accept`); return; }
+    // exchange resources
+    const offerResPair = Object.entries(pendingOffer.offer)[0];
+    const [offerKey, offerQty] = offerResPair;
+    players[pendingOffer.from].res[offerKey] -= offerQty;
+    recipient.res[offerKey] = (recipient.res[offerKey]||0) + offerQty;
+    recipient.res[reqKey] -= reqQty;
+    players[pendingOffer.from].res[reqKey] = (players[pendingOffer.from].res[reqKey]||0) + reqQty;
+    toast('Trade completed');
+    pendingOffer = null;
+    document.body.removeChild(modal);
+    renderResourcePanel(); renderPlayers();
+  };
+  modal.querySelector('#rejectOffer').onclick = ()=>{
+    toast('Offer rejected');
+    pendingOffer = null;
+    document.body.removeChild(modal);
+  };
+}
+
+function formatResList(obj){
+  return Object.entries(obj).map(([k,v]) => `${v} × ${k}`).join(', ');
+}
+
+/* ---------- End turn ---------- */
+document.getElementById('endBtn').onclick = ()=>{
+  if(setupPhase){ toast('Finish setup first'); return; }
+  if(lastRoll === null){ toast('You must roll before ending your turn'); return; }
+  lastRoll = null;
+  currentPlayer = (currentPlayer+1) % players.length;
+  updateHeader();
+  renderBoard();
+  renderResourcePanel();
+};
+
+/* ---------- Highlight valid tiles in build modes ---------- */
+function highlightValidTiles(){
+  tiles.forEach((t, idx)=>{
+    const el = document.getElementById('tile-'+idx);
+    if(!el) return;
+    el.classList.remove('highlight');
+    if(setupPhase){
+      if(t.owner === null) el.classList.add('highlight');
+      return;
+    }
+    if(buildMode === 'settlement' && t.owner === null) el.classList.add('highlight');
+    if(buildMode === 'city' && t.owner === currentPlayer && !t.isCity) el.classList.add('highlight');
+    if(buildMode === 'road') el.classList.add('highlight');
+  });
+}
+
+/* ---------- Event listeners ---------- */
+document.getElementById('rollBtn').onclick = ()=>rollDice();
+document.getElementById('moveRobberBtn').onclick = ()=>openRobberModal();
+document.getElementById('buildSettlementBtn').onclick = ()=>{ if(setupPhase){ toast('Place starting settlement by tapping an empty tile'); return; } buildMode='settlement'; toast('Tap an empty tile to build settlement'); highlightValidTiles(); };
+document.getElementById('buildCityBtn').onclick = ()=>{ buildMode='city'; toast('Tap your settlement to upgrade to a city'); highlightValidTiles(); };
+document.getElementById('buildRoadBtn').onclick = ()=>{ buildMode='road'; toast('Tap any tile to pay for a road (abstract)'); highlightValidTiles(); };
+
+/* ---------- Initialization: randomize tiles slightly then render ---------- */
+function shuffleArray(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+function initTiles(){
+  // We want variety: resources pool same count as length-1 (desert included)
+  const poolRes = ["wood","brick","wheat","sheep","ore","wood","brick","wheat"];
+  shuffleArray(poolRes);
+  const poolNums = [5,6,8,9,4,10,11,3]; // include a 3 to vary
+  shuffleArray(poolNums);
+  tiles.forEach((t,i)=>{ t.res = poolRes[i]; t.num = (t.res === 'desert') ? null : poolNums[i]; t.owner=null; t.isCity=false; t.robber = (t.res === 'desert'); });
+}
+function startGame(){
+  initTiles();
+  currentPlayer = 0; setupPhase = true; placedCount = 0; buildMode=null; lastRoll=null; pendingOffer=null;
+  players.forEach(p=>{ p.res={wood:0,brick:0,wheat:0,sheep:0,ore:0}; p.vp=0; p.roads=0; p._roadBonus=false; });
+  renderBoard(); updateHeader(); renderResourcePanel();
+  toast('Welcome — each player place 1 starting settlement by tapping an empty tile.');
+}
+startGame();
+</script>
+</body>
+</html>
